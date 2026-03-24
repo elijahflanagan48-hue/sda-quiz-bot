@@ -1,0 +1,738 @@
+{
+  "project": {
+    "name": "ЕГЭ Английский — Тренажёр",
+    "description": "Веб-приложение для подготовки к ЕГЭ по английскому языку. Два типа пользователей (ученик / учитель), два режима (тренировка / экзамен). Требования ФИПИ 2024–2025.",
+    "version": "1.0.0",
+    "language": "ru",
+    "locale": "ru-RU"
+  },
+
+  "sourceDocuments": {
+    "note": "Перед генерацией заданий Claude Code должен скачать и распарсить эти PDF через Google Drive API или попросить пользователя положить файлы в папку /data/source-pdfs/",
+    "examCollection": {
+      "driveUrl": "https://drive.google.com/file/d/109To14G2sLWLxTmgpQ37EJRqx67fH1Uz/view?usp=drive_link",
+      "localPath": "data/source-pdfs/exam_collection.pdf",
+      "purpose": "Готовые варианты для режима ЭКЗАМЕН — использовать как есть, целыми вариантами"
+    },
+    "practiceBank1": {
+      "driveUrl": "https://drive.google.com/file/d/1TKCJ_qEUS3dh99gSL6Vn3tLDl6OiGSI4/view?usp=drive_link",
+      "localPath": "data/source-pdfs/practice_bank_1.pdf",
+      "purpose": "Банк тренировочных заданий для режима ТРЕНИРОВКА"
+    },
+    "practiceBank2": {
+      "driveUrl": "https://drive.google.com/file/d/15y5VjMudf_3SOzsIBA1urh0yGUzNph-c/view?usp=drive_link",
+      "localPath": "data/source-pdfs/practice_bank_2.pdf",
+      "purpose": "Банк тренировочных заданий для режима ТРЕНИРОВКА"
+    },
+    "parsingInstructions": "После скачивания PDF — запустить скрипт scripts/parse-pdfs.ts, который разберёт задания по типам и занесёт их в БД через Prisma seed. Аудиофайлы к заданиям на аудирование необходимо добавить вручную в папку /public/audio/ с именами audio_task_{variantId}_{taskNumber}.mp3"
+  },
+
+  "techStack": {
+    "framework": "Next.js 14 (App Router)",
+    "language": "TypeScript",
+    "database": "SQLite (через Prisma ORM) — для продакшена заменить на PostgreSQL",
+    "auth": "NextAuth.js v5 (credentials provider для логина по email+пароль)",
+    "styling": "Tailwind CSS + shadcn/ui",
+    "fileStorage": "локальная папка /public/uploads/ — для продакшена заменить на S3/Supabase Storage",
+    "audio": "HTML5 Audio API (встроенный плеер) + MediaRecorder API для записи устных ответов учеников",
+    "timer": "кастомный React-хук useExamTimer (countdown, автосабмит по истечении)",
+    "packageManager": "pnpm",
+    "deployment": "Vercel (или самостоятельный хостинг)",
+    "devTools": ["prisma", "eslint", "prettier", "ts-node"]
+  },
+
+  "userRoles": {
+    "student": {
+      "id": "STUDENT",
+      "description": "Ученик — регистрируется и занимается самостоятельно",
+      "capabilities": [
+        "Регистрация и вход по email+пароль",
+        "Выбор режима: Тренировка или Экзамен",
+        "Выполнение всех типов заданий ЕГЭ",
+        "Запись устных ответов (задания 1–4 устной части) через микрофон",
+        "Просмотр своей статистики и истории",
+        "Просмотр правильных ответов после завершения сессии",
+        "Личный кабинет: прогресс по разделам, слабые места"
+      ]
+    },
+    "teacher": {
+      "id": "TEACHER",
+      "description": "Учитель — один аккаунт, создаётся при первом запуске через TEACHER_EMAIL в .env",
+      "capabilities": [
+        "Просмотр всех учеников и их результатов",
+        "Проверка письменных заданий (37 и 38): выставление баллов по критериям ФИПИ",
+        "Прослушивание и оценка устных заданий учеников",
+        "Написание текстового фидбека к каждой работе",
+        "Управление банком заданий (добавление, редактирование, деактивация)",
+        "Создание новых вариантов для режима Экзамен",
+        "Просмотр общей статистики по классу/группе",
+        "Экспорт результатов в CSV"
+      ]
+    }
+  },
+
+  "examStructure": {
+    "source": "ФИПИ 2024–2025. Кодификатор и демовариант актуальны на момент создания.",
+    "writtenPart": {
+      "totalTime": 180,
+      "totalTimeUnit": "минуты",
+      "maxScore": 83,
+      "sections": [
+        {
+          "id": "listening",
+          "nameRu": "Раздел 1. Аудирование",
+          "timeMinutes": 30,
+          "tasks": [
+            {
+              "number": 1,
+              "type": "matching",
+              "formatRu": "Установите соответствие: 6 высказываний → варианты A–G (7 штук, один лишний)",
+              "maxScore": 6,
+              "autoCheck": true,
+              "inputType": "select",
+              "instructions": "Вы услышите 6 высказываний. Установите соответствие между высказываниями каждого говорящего и утверждениями, данными в списке. Используйте каждое утверждение, обозначенное соответствующей буквой, только один раз. В задании есть одно лишнее утверждение.",
+              "preparationTime": 30,
+              "audioPlays": 2
+            },
+            {
+              "number": "2-8",
+              "type": "multipleChoice",
+              "formatRu": "Множественный выбор: один верный из трёх вариантов (A/B/C) для каждого из 7 вопросов",
+              "maxScore": 7,
+              "autoCheck": true,
+              "inputType": "radio",
+              "instructions": "Вы услышите интервью. В заданиях 2–8 выберите правильный ответ (A, B или C).",
+              "preparationTime": 60,
+              "audioPlays": 2
+            },
+            {
+              "number": "9-15",
+              "type": "shortAnswer",
+              "formatRu": "Краткий ответ: вписать слово/число в пропуск (7 заданий)",
+              "maxScore": 7,
+              "autoCheck": true,
+              "inputType": "text",
+              "instructions": "Вы услышите диалог. Заполните пропуски в тексте. Вы услышите запись дважды.",
+              "preparationTime": 60,
+              "audioPlays": 2
+            }
+          ]
+        },
+        {
+          "id": "reading",
+          "nameRu": "Раздел 2. Чтение",
+          "timeMinutes": 30,
+          "tasks": [
+            {
+              "number": 10,
+              "type": "headingMatching",
+              "formatRu": "Установить соответствие: 7 абзацев → заголовки A–H (8 штук, один лишний)",
+              "maxScore": 7,
+              "autoCheck": true,
+              "inputType": "select"
+            },
+            {
+              "number": "11-16",
+              "type": "trueNotStatedFalse",
+              "formatRu": "True / False / Not stated для каждого из 6 утверждений",
+              "maxScore": 6,
+              "autoCheck": true,
+              "inputType": "radio"
+            },
+            {
+              "number": "17-24",
+              "type": "multipleChoiceCloze",
+              "formatRu": "Множественный выбор: заполнить 8 пропусков в тексте (A/B/C/D)",
+              "maxScore": 8,
+              "autoCheck": true,
+              "inputType": "select"
+            }
+          ]
+        },
+        {
+          "id": "grammarVocab",
+          "nameRu": "Раздел 3. Грамматика и лексика",
+          "timeMinutes": 40,
+          "tasks": [
+            {
+              "number": "25-31",
+              "type": "grammarTransformation",
+              "formatRu": "Раскрыть скобки / поставить слово в нужную форму (7 заданий)",
+              "maxScore": 7,
+              "autoCheck": true,
+              "inputType": "text",
+              "note": "Нечувствителен к регистру, проверка нормализованным вводом"
+            },
+            {
+              "number": "32-38",
+              "type": "wordFormation",
+              "formatRu": "Словообразование: образовать нужную форму слова (7 заданий)",
+              "maxScore": 7,
+              "autoCheck": true,
+              "inputType": "text"
+            },
+            {
+              "number": "39-44",
+              "type": "lexicalCloze",
+              "formatRu": "Лексический тест: выбрать слово из 4 вариантов (6 заданий)",
+              "maxScore": 6,
+              "autoCheck": true,
+              "inputType": "radio"
+            }
+          ]
+        },
+        {
+          "id": "writing",
+          "nameRu": "Раздел 4. Письмо",
+          "timeMinutes": 80,
+          "tasks": [
+            {
+              "number": 37,
+              "type": "email",
+              "formatRu": "Электронное письмо другу (130–150 слов) в ответ на письмо-стимул",
+              "maxScore": 6,
+              "autoCheck": false,
+              "teacherCheck": true,
+              "inputType": "textarea",
+              "wordLimitMin": 130,
+              "wordLimitMax": 150,
+              "scoringCriteria": [
+                { "id": "K1", "nameRu": "Решение коммуникативной задачи", "maxPoints": 2 },
+                { "id": "K2", "nameRu": "Организация текста", "maxPoints": 2 },
+                { "id": "K3", "nameRu": "Языковое оформление", "maxPoints": 2 }
+              ]
+            },
+            {
+              "number": 38,
+              "type": "essay",
+              "formatRu": "Развёрнутое письменное высказывание (развёрнутый ответ / эссе, 200–250 слов)",
+              "maxScore": 14,
+              "autoCheck": false,
+              "teacherCheck": true,
+              "inputType": "textarea",
+              "wordLimitMin": 200,
+              "wordLimitMax": 250,
+              "scoringCriteria": [
+                { "id": "K1", "nameRu": "Решение коммуникативной задачи", "maxPoints": 3 },
+                { "id": "K2", "nameRu": "Организация текста", "maxPoints": 3 },
+                { "id": "K3", "nameRu": "Лексика", "maxPoints": 3 },
+                { "id": "K4", "nameRu": "Грамматика", "maxPoints": 3 },
+                { "id": "K5", "nameRu": "Орфография и пунктуация", "maxPoints": 2 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "oralPart": {
+      "totalTime": 15,
+      "totalTimeUnit": "минуты",
+      "maxScore": 20,
+      "note": "Устная часть — отдельный экзамен (не в один день с письменной частью)",
+      "tasks": [
+        {
+          "number": 1,
+          "type": "readAloud",
+          "nameRu": "Чтение текста вслух",
+          "preparationTimeSec": 150,
+          "recordingTimeSec": 90,
+          "maxScore": 1,
+          "autoCheck": false,
+          "teacherCheck": true,
+          "scoringCriteria": [
+            { "id": "fon", "nameRu": "Фонетическая сторона речи", "maxPoints": 1 }
+          ]
+        },
+        {
+          "number": 2,
+          "type": "conditionalDialog",
+          "nameRu": "Условный диалог-расспрос (5 вопросов по объявлению)",
+          "preparationTimeSec": 90,
+          "recordingTimeSec": 180,
+          "maxScore": 5,
+          "autoCheck": false,
+          "teacherCheck": true,
+          "instructions": "Используя данные ключевые слова-опоры, задайте 5 вопросов по объявлению.",
+          "scoringCriteria": [
+            { "id": "Q1", "nameRu": "Вопрос 1 (1 балл)", "maxPoints": 1 },
+            { "id": "Q2", "nameRu": "Вопрос 2 (1 балл)", "maxPoints": 1 },
+            { "id": "Q3", "nameRu": "Вопрос 3 (1 балл)", "maxPoints": 1 },
+            { "id": "Q4", "nameRu": "Вопрос 4 (1 балл)", "maxPoints": 1 },
+            { "id": "Q5", "nameRu": "Вопрос 5 (1 балл)", "maxPoints": 1 }
+          ]
+        },
+        {
+          "number": 3,
+          "type": "photoMonologue",
+          "nameRu": "Монолог-описание фотографии (по плану)",
+          "preparationTimeSec": 150,
+          "recordingTimeSec": 120,
+          "maxScore": 7,
+          "autoCheck": false,
+          "teacherCheck": true,
+          "descriptionPlan": [
+            "where and when the photo was taken",
+            "what/who is in the photo",
+            "what is happening",
+            "why you like/dislike the photo",
+            "why you chose to show the friend this photo"
+          ],
+          "scoringCriteria": [
+            { "id": "K1", "nameRu": "Решение коммуникативной задачи", "maxPoints": 3 },
+            { "id": "K2", "nameRu": "Организация высказывания", "maxPoints": 2 },
+            { "id": "K3", "nameRu": "Языковое оформление высказывания", "maxPoints": 2 }
+          ]
+        },
+        {
+          "number": 4,
+          "type": "photoComparison",
+          "nameRu": "Сравнение двух фотографий",
+          "preparationTimeSec": 150,
+          "recordingTimeSec": 150,
+          "maxScore": 7,
+          "autoCheck": false,
+          "teacherCheck": true,
+          "descriptionPlan": [
+            "what is common in the photos",
+            "what the differences are",
+            "which of the activities shown you would prefer and why"
+          ],
+          "scoringCriteria": [
+            { "id": "K1", "nameRu": "Решение коммуникативной задачи", "maxPoints": 3 },
+            { "id": "K2", "nameRu": "Организация высказывания", "maxPoints": 2 },
+            { "id": "K3", "nameRu": "Языковое оформление высказывания", "maxPoints": 2 }
+          ]
+        }
+      ]
+    }
+  },
+
+  "appModes": {
+    "practice": {
+      "id": "PRACTICE",
+      "nameRu": "Тренировка",
+      "descriptionRu": "Повторяющиеся задания одного типа подряд. Без ограничения времени. После каждого задания — немедленная обратная связь (для автопроверяемых).",
+      "features": [
+        "Выбор раздела (Аудирование / Чтение / Грамматика / Лексика / Письмо / Устная часть)",
+        "Выбор конкретного типа задания внутри раздела",
+        "Режим 'марафон': N заданий подряд одного типа (5/10/20/все доступные)",
+        "После каждого автопроверяемого задания — показать правильный ответ и пояснение",
+        "Для письменных и устных — добавить в очередь на проверку учителем",
+        "Счётчик правильных ответов и процент в текущей сессии",
+        "Кнопка 'Пропустить' для перехода к следующему заданию",
+        "Сохранение прогресса сессии при случайном закрытии (localStorage)"
+      ],
+      "sourceData": ["practiceBank1", "practiceBank2"]
+    },
+    "exam": {
+      "id": "EXAM",
+      "nameRu": "Экзамен",
+      "descriptionRu": "Полная имитация ЕГЭ: один вариант от начала до конца, на время. Письменная и устная части — отдельные сессии.",
+      "features": [
+        "Выбор: Письменная часть (180 мин) или Устная часть (15 мин)",
+        "Таймер обратного отсчёта на весь экзамен (крупно, в шапке)",
+        "Предупреждение за 30 и 10 минут до конца",
+        "Автосдача по истечении времени",
+        "Навигация по заданиям: боковая панель с номерами (зелёный = выполнено, серый = не выполнено)",
+        "Возможность вернуться к любому заданию",
+        "Запрет на изменение ответов после сдачи",
+        "После сдачи — итоговый экран с баллами по разделам (автопроверяемые)",
+        "Письменные и устные задания — в статусе 'Ожидает проверки учителя'",
+        "Полная история вариантов с датой и результатом"
+      ],
+      "sourceData": ["examCollection"],
+      "timerWarnings": [30, 10],
+      "parts": ["written", "oral"]
+    }
+  },
+
+  "databaseSchema": {
+    "orm": "Prisma",
+    "models": [
+      {
+        "name": "User",
+        "fields": [
+          { "name": "id", "type": "String", "attr": "@id @default(cuid())" },
+          { "name": "email", "type": "String", "attr": "@unique" },
+          { "name": "name", "type": "String" },
+          { "name": "passwordHash", "type": "String" },
+          { "name": "role", "type": "Role", "default": "STUDENT" },
+          { "name": "createdAt", "type": "DateTime", "attr": "@default(now())" },
+          { "name": "avatarUrl", "type": "String?", "attr": "nullable" },
+          { "name": "sessions", "relation": "Session[]" },
+          { "name": "submissions", "relation": "TaskSubmission[]" },
+          { "name": "examAttempts", "relation": "ExamAttempt[]" }
+        ]
+      },
+      {
+        "name": "Role",
+        "type": "enum",
+        "values": ["STUDENT", "TEACHER"]
+      },
+      {
+        "name": "Task",
+        "comment": "Одно задание из банка",
+        "fields": [
+          { "name": "id", "type": "String", "attr": "@id @default(cuid())" },
+          { "name": "section", "type": "ExamSection" },
+          { "name": "taskNumber", "type": "Int", "comment": "Номер задания по ФИПИ (1–38 письменная, 1–4 устная)" },
+          { "name": "taskType", "type": "TaskType" },
+          { "name": "difficulty", "type": "Int", "attr": "@default(2)", "comment": "1=легко, 2=средне, 3=сложно" },
+          { "name": "content", "type": "Json", "comment": "Текст задания, варианты ответов, ключ — структура зависит от taskType" },
+          { "name": "correctAnswer", "type": "String?", "comment": "JSON-строка для автопроверяемых заданий" },
+          { "name": "explanation", "type": "String?", "comment": "Пояснение к правильному ответу" },
+          { "name": "audioUrl", "type": "String?", "comment": "Путь к аудиофайлу для заданий на аудирование" },
+          { "name": "imageUrl", "type": "String?", "comment": "Путь к изображению для устных заданий 3–4" },
+          { "name": "sourceFile", "type": "String?", "comment": "Из какого PDF взято задание" },
+          { "name": "isActive", "type": "Boolean", "attr": "@default(true)" },
+          { "name": "createdAt", "type": "DateTime", "attr": "@default(now())" },
+          { "name": "examVariants", "relation": "ExamVariantTask[]" }
+        ]
+      },
+      {
+        "name": "ExamSection",
+        "type": "enum",
+        "values": ["LISTENING", "READING", "GRAMMAR_VOCAB", "WRITING", "ORAL"]
+      },
+      {
+        "name": "TaskType",
+        "type": "enum",
+        "values": [
+          "MATCHING",
+          "MULTIPLE_CHOICE",
+          "SHORT_ANSWER",
+          "HEADING_MATCHING",
+          "TRUE_NOT_STATED_FALSE",
+          "MULTIPLE_CHOICE_CLOZE",
+          "GRAMMAR_TRANSFORMATION",
+          "WORD_FORMATION",
+          "LEXICAL_CLOZE",
+          "EMAIL",
+          "ESSAY",
+          "READ_ALOUD",
+          "CONDITIONAL_DIALOG",
+          "PHOTO_MONOLOGUE",
+          "PHOTO_COMPARISON"
+        ]
+      },
+      {
+        "name": "ExamVariant",
+        "comment": "Готовый вариант ЕГЭ (38 заданий письменной части)",
+        "fields": [
+          { "name": "id", "type": "String", "attr": "@id @default(cuid())" },
+          { "name": "title", "type": "String", "comment": "Например 'Вариант 5 (Официальный ФИПИ)'" },
+          { "name": "year", "type": "Int?" },
+          { "name": "isOfficial", "type": "Boolean", "attr": "@default(false)" },
+          { "name": "tasks", "relation": "ExamVariantTask[]" },
+          { "name": "attempts", "relation": "ExamAttempt[]" },
+          { "name": "createdAt", "type": "DateTime", "attr": "@default(now())" }
+        ]
+      },
+      {
+        "name": "ExamVariantTask",
+        "comment": "Связь варианта и задания (с порядком)",
+        "fields": [
+          { "name": "variantId", "type": "String" },
+          { "name": "taskId", "type": "String" },
+          { "name": "order", "type": "Int", "comment": "Порядковый номер в варианте" }
+        ]
+      },
+      {
+        "name": "ExamAttempt",
+        "comment": "Одна попытка пройти вариант (режим Экзамен)",
+        "fields": [
+          { "name": "id", "type": "String", "attr": "@id @default(cuid())" },
+          { "name": "userId", "type": "String" },
+          { "name": "variantId", "type": "String" },
+          { "name": "part", "type": "ExamPart", "comment": "WRITTEN или ORAL" },
+          { "name": "status", "type": "AttemptStatus", "attr": "@default(IN_PROGRESS)" },
+          { "name": "startedAt", "type": "DateTime", "attr": "@default(now())" },
+          { "name": "finishedAt", "type": "DateTime?" },
+          { "name": "timeSpentSec", "type": "Int?" },
+          { "name": "autoScore", "type": "Int?", "comment": "Авто-подсчитанный балл" },
+          { "name": "teacherScore", "type": "Int?", "comment": "Итоговый балл после проверки учителем" },
+          { "name": "submissions", "relation": "TaskSubmission[]" }
+        ]
+      },
+      {
+        "name": "ExamPart",
+        "type": "enum",
+        "values": ["WRITTEN", "ORAL"]
+      },
+      {
+        "name": "AttemptStatus",
+        "type": "enum",
+        "values": ["IN_PROGRESS", "SUBMITTED", "TEACHER_REVIEW", "GRADED"]
+      },
+      {
+        "name": "TaskSubmission",
+        "comment": "Ответ ученика на конкретное задание",
+        "fields": [
+          { "name": "id", "type": "String", "attr": "@id @default(cuid())" },
+          { "name": "userId", "type": "String" },
+          { "name": "taskId", "type": "String" },
+          { "name": "attemptId", "type": "String?", "comment": "null для режима Тренировка" },
+          { "name": "mode", "type": "AppMode" },
+          { "name": "answer", "type": "String", "comment": "JSON: введённый ответ ученика" },
+          { "name": "audioUrl", "type": "String?", "comment": "Путь к записи устного ответа" },
+          { "name": "isCorrect", "type": "Boolean?", "comment": "null для субъективных заданий" },
+          { "name": "autoScore", "type": "Int?", "comment": "Для автопроверяемых заданий" },
+          { "name": "teacherScore", "type": "Int?", "comment": "Балл, выставленный учителем" },
+          { "name": "criteriaScores", "type": "Json?", "comment": "{ K1: 2, K2: 1, ... } — для письменных/устных" },
+          { "name": "teacherFeedback", "type": "String?", "comment": "Текстовый комментарий учителя" },
+          { "name": "reviewedAt", "type": "DateTime?" },
+          { "name": "createdAt", "type": "DateTime", "attr": "@default(now())" }
+        ]
+      },
+      {
+        "name": "AppMode",
+        "type": "enum",
+        "values": ["PRACTICE", "EXAM"]
+      },
+      {
+        "name": "PracticeSession",
+        "comment": "Сессия тренировки (для статистики)",
+        "fields": [
+          { "name": "id", "type": "String", "attr": "@id @default(cuid())" },
+          { "name": "userId", "type": "String" },
+          { "name": "section", "type": "ExamSection" },
+          { "name": "taskType", "type": "TaskType" },
+          { "name": "totalTasks", "type": "Int" },
+          { "name": "correctTasks", "type": "Int" },
+          { "name": "startedAt", "type": "DateTime", "attr": "@default(now())" },
+          { "name": "finishedAt", "type": "DateTime?" }
+        ]
+      }
+    ]
+  },
+
+  "routes": {
+    "public": [
+      { "path": "/", "component": "LandingPage", "description": "Главная: описание, кнопки 'Войти' и 'Зарегистрироваться'" },
+      { "path": "/auth/login", "component": "LoginPage" },
+      { "path": "/auth/register", "component": "RegisterPage", "note": "Регистрация только для учеников. Учитель создаётся через seed или env." }
+    ],
+    "student": [
+      { "path": "/dashboard", "component": "StudentDashboard", "description": "Личный кабинет: статистика, последние сессии, прогресс" },
+      { "path": "/practice", "component": "PracticeHome", "description": "Выбор раздела и типа задания для тренировки" },
+      { "path": "/practice/[section]", "component": "PracticeSection", "description": "Список типов заданий в разделе" },
+      { "path": "/practice/session", "component": "PracticeSession", "description": "Активная тренировочная сессия" },
+      { "path": "/exam", "component": "ExamHome", "description": "Выбор части экзамена и варианта" },
+      { "path": "/exam/[attemptId]", "component": "ExamSession", "description": "Активная сессия экзамена с таймером" },
+      { "path": "/exam/[attemptId]/results", "component": "ExamResults", "description": "Результаты после сдачи" },
+      { "path": "/history", "component": "StudentHistory", "description": "История всех сессий и попыток" },
+      { "path": "/profile", "component": "StudentProfile", "description": "Настройки аккаунта" }
+    ],
+    "teacher": [
+      { "path": "/teacher", "component": "TeacherDashboard", "description": "Обзор: сколько работ ждут проверки, статистика класса" },
+      { "path": "/teacher/students", "component": "StudentsList", "description": "Список учеников с прогрессом" },
+      { "path": "/teacher/students/[userId]", "component": "StudentDetail", "description": "Детальная статистика конкретного ученика" },
+      { "path": "/teacher/review", "component": "ReviewQueue", "description": "Очередь работ на проверку (письменные + устные)" },
+      { "path": "/teacher/review/[submissionId]", "component": "ReviewSubmission", "description": "Интерфейс проверки одной работы с выставлением баллов по критериям" },
+      { "path": "/teacher/tasks", "component": "TaskBank", "description": "Управление банком заданий" },
+      { "path": "/teacher/tasks/new", "component": "TaskEditor", "description": "Добавить новое задание" },
+      { "path": "/teacher/tasks/[taskId]/edit", "component": "TaskEditor", "description": "Редактировать задание" },
+      { "path": "/teacher/variants", "component": "VariantsList", "description": "Список вариантов для режима Экзамен" },
+      { "path": "/teacher/variants/new", "component": "VariantBuilder", "description": "Создать новый вариант" },
+      { "path": "/teacher/export", "component": "ExportPage", "description": "Экспорт результатов в CSV" }
+    ]
+  },
+
+  "keyComponents": {
+    "TaskRenderer": {
+      "description": "Универсальный компонент для отображения задания. Получает task, mode (practice/exam), onSubmit. Сам знает, какой интерфейс показать по taskType.",
+      "subcomponents": [
+        "MatchingTask — два столбца с drag-or-select соответствием",
+        "MultipleChoiceTask — список радиокнопок A/B/C",
+        "ShortAnswerTask — текстовый инпут с подстановкой в предложение",
+        "HeadingMatchingTask — абзацы с выпадающими списками",
+        "TrueNotStatedFalseTask — список утверждений с выбором T/NS/F",
+        "ClozeTask — текст с пропусками (select или input)",
+        "WritingTask — Textarea с счётчиком слов в реальном времени",
+        "ReadAloudTask — показывает текст, таймер подготовки, кнопка начала записи, аудиозапись через MediaRecorder",
+        "ConditionalDialogTask — показывает объявление и 5 key word prompts, запись ответа",
+        "PhotoTask — показывает 1 или 2 фото, план описания, запись ответа"
+      ]
+    },
+    "ExamTimer": {
+      "description": "Таймер обратного отсчёта. Props: totalSeconds, warningThresholds. Показывает HH:MM:SS. Красный при < 10 мин. Вызывает onExpire при 0.",
+      "placement": "Sticky header в ExamSession"
+    },
+    "ExamNavigator": {
+      "description": "Боковая панель в режиме Экзамен. Список номеров заданий 1–38. Цвет: серый=не выполнено, жёлтый=выполнено, зелёный=отмечено как уверенно.",
+      "behavior": "Клик — скролл к заданию или переход к нему"
+    },
+    "WordCounter": {
+      "description": "Для заданий 37 и 38. Показывает количество слов в реальном времени. Цвет: красный если < min или > max, зелёный если в диапазоне.",
+      "props": ["currentCount", "min", "max"]
+    },
+    "AudioPlayer": {
+      "description": "Кастомный плеер для заданий на аудирование. Кнопки: Play/Pause, скраббер, счётчик воспроизведений (макс 2). Блокирует третье воспроизведение.",
+      "props": ["audioUrl", "maxPlays", "preparationTimeSec"]
+    },
+    "AudioRecorder": {
+      "description": "Запись микрофона через MediaRecorder API. Показывает: таймер подготовки (обратный отсчёт), затем кнопку Start Recording, затем таймер записи, Stop. Сохраняет WebM-файл.",
+      "props": ["preparationTimeSec", "maxRecordingTimeSec", "onRecordingComplete"]
+    },
+    "CriteriaScorer": {
+      "description": "Компонент для учителя при проверке письменных/устных работ. Показывает каждый критерий с слайдером или кнопками 0/1/2/3. Авто-суммирует итоговый балл.",
+      "props": ["criteria", "onChange"]
+    },
+    "StudentProgressChart": {
+      "description": "График прогресса ученика по разделам. Recharts RadarChart или BarChart. Показывает процент правильных по каждому типу задания.",
+      "library": "recharts"
+    }
+  },
+
+  "apiRoutes": {
+    "prefix": "/api",
+    "routes": [
+      { "method": "POST", "path": "/auth/register", "description": "Регистрация ученика" },
+      { "method": "GET", "path": "/tasks", "params": "section, taskType, limit, excludeIds", "description": "Получить задания для тренировки" },
+      { "method": "GET", "path": "/tasks/[taskId]", "description": "Получить задание по ID" },
+      { "method": "POST", "path": "/tasks", "role": "TEACHER", "description": "Добавить задание" },
+      { "method": "PUT", "path": "/tasks/[taskId]", "role": "TEACHER", "description": "Редактировать задание" },
+      { "method": "GET", "path": "/variants", "description": "Список вариантов" },
+      { "method": "GET", "path": "/variants/[variantId]", "description": "Вариант с заданиями" },
+      { "method": "POST", "path": "/variants", "role": "TEACHER", "description": "Создать вариант" },
+      { "method": "POST", "path": "/exam/start", "body": "{ variantId, part }", "description": "Начать экзамен — создать ExamAttempt" },
+      { "method": "POST", "path": "/exam/[attemptId]/submit", "description": "Сдать экзамен, передать все ответы" },
+      { "method": "POST", "path": "/submissions", "description": "Сохранить ответ на задание (тренировка или экзамен)" },
+      { "method": "POST", "path": "/submissions/[submissionId]/audio", "contentType": "multipart/form-data", "description": "Загрузить аудиозапись устного ответа" },
+      { "method": "PUT", "path": "/submissions/[submissionId]/review", "role": "TEACHER", "body": "{ criteriaScores, teacherScore, teacherFeedback }", "description": "Учитель проверяет работу" },
+      { "method": "GET", "path": "/teacher/review-queue", "role": "TEACHER", "description": "Работы, ожидающие проверки" },
+      { "method": "GET", "path": "/teacher/students", "role": "TEACHER", "description": "Список учеников" },
+      { "method": "GET", "path": "/teacher/students/[userId]/stats", "role": "TEACHER", "description": "Статистика ученика" },
+      { "method": "GET", "path": "/student/stats", "description": "Собственная статистика ученика" },
+      { "method": "GET", "path": "/student/history", "description": "История сессий и попыток" },
+      { "method": "GET", "path": "/teacher/export/csv", "role": "TEACHER", "description": "Экспорт результатов CSV" }
+    ]
+  },
+
+  "teacherDashboard": {
+    "sections": [
+      {
+        "id": "reviewQueue",
+        "nameRu": "Очередь проверки",
+        "description": "Список работ (письменных и устных), ожидающих оценки. Сортировка: сначала самые старые. Карточка: имя ученика, тип задания, дата сдачи, вариант/сессия.",
+        "priorityBadge": "Показывает количество непроверенных работ в шапке навигации"
+      },
+      {
+        "id": "reviewInterface",
+        "nameRu": "Интерфейс проверки",
+        "description": "Два столбца: слева — работа ученика (текст/аудио/фото), справа — инструменты оценки.",
+        "writingFeatures": [
+          "Показывает задание-стимул сверху",
+          "Ответ ученика с подсветкой слишком коротких/длинных работ",
+          "Счётчик слов",
+          "CriteriaScorer для каждого критерия К1–К5",
+          "Поле для текстового комментария с подсказками (заготовки фраз)",
+          "Кнопка 'Сохранить оценку' и 'Следующая работа'"
+        ],
+        "oralFeatures": [
+          "Аудиоплеер для прослушивания ответа ученика",
+          "Задание ученика (текст/фото) рядом",
+          "CriteriaScorer",
+          "Поле для фидбека"
+        ]
+      },
+      {
+        "id": "studentProgress",
+        "nameRu": "Прогресс учеников",
+        "tableColumns": ["Имя", "Email", "Последняя активность", "Тренировок", "Экзаменов", "Средний балл (письм.)", "Средний балл (устн.)", "Непроверено работ"],
+        "clickAction": "Открыть детальную страницу ученика"
+      }
+    ]
+  },
+
+  "studentDashboard": {
+    "sections": [
+      {
+        "id": "stats",
+        "nameRu": "Моя статистика",
+        "widgets": [
+          "Радар-чарт: процент правильных ответов по 4 разделам письменной части",
+          "Полоса прогресса: сколько заданий каждого типа выполнено",
+          "Карточки: последние 3 результата экзамена с датой и баллом",
+          "Банер: 'Ожидает проверки учителя — X работ'"
+        ]
+      },
+      {
+        "id": "weakPoints",
+        "nameRu": "Слабые места",
+        "description": "Топ-3 типа заданий с наименьшим процентом правильных ответов. Ссылка 'Потренировать' для каждого."
+      },
+      {
+        "id": "recentActivity",
+        "nameRu": "Недавняя активность",
+        "description": "Хронологический список: иконка (тренировка/экзамен), раздел, дата, результат"
+      }
+    ]
+  },
+
+  "designSystem": {
+    "theme": "Светлая (по умолчанию) + переключатель тёмная/светлая",
+    "primaryColor": "Синий (образовательная/академическая тематика)",
+    "typography": "Inter или системный шрифт",
+    "language": "Весь интерфейс на русском, задания на английском",
+    "components": "shadcn/ui (Button, Card, Badge, Dialog, Tabs, Progress, Separator, Toast)",
+    "responsiveness": "Mobile-first. Экзаменационный режим оптимизирован для десктопа (боковая навигация).",
+    "accessibilityNotes": [
+      "Аудиозадания — субтитры не нужны (имитация реального экзамена)",
+      "Достаточный контраст для длительного чтения",
+      "Шрифт не менее 16px для текстов заданий"
+    ]
+  },
+
+  "envVariables": {
+    "required": [
+      { "name": "DATABASE_URL", "example": "file:./dev.db", "description": "Строка подключения к БД" },
+      { "name": "NEXTAUTH_SECRET", "example": "your-secret-here", "description": "Секрет для NextAuth" },
+      { "name": "NEXTAUTH_URL", "example": "http://localhost:3000" },
+      { "name": "TEACHER_EMAIL", "example": "teacher@school.ru", "description": "Email учителя — создаётся автоматически при seed" },
+      { "name": "TEACHER_PASSWORD", "example": "strongpassword123", "description": "Пароль учителя при seed" },
+      { "name": "TEACHER_NAME", "example": "Мария Ивановна", "description": "Имя учителя при seed" }
+    ],
+    "optional": [
+      { "name": "UPLOAD_DIR", "default": "public/uploads", "description": "Папка для хранения аудиозаписей учеников" },
+      { "name": "MAX_AUDIO_SIZE_MB", "default": "10" }
+    ]
+  },
+
+  "buildOrder": [
+    "1. Инициализация проекта: next.js + prisma + tailwind + shadcn/ui + nextauth",
+    "2. Prisma schema по модели из databaseSchema + миграция + seed (учитель + demo задания)",
+    "3. NextAuth конфигурация: credentials provider, две роли, middleware защита маршрутов",
+    "4. Базовый layout: навигация (разная для student/teacher/guest), тёмная тема",
+    "5. Страницы auth: /auth/login, /auth/register",
+    "6. Компонент TaskRenderer + все под-компоненты типов заданий (начать с автопроверяемых)",
+    "7. Режим Тренировка: /practice, /practice/[section], /practice/session",
+    "8. API маршруты для заданий и submission",
+    "9. Режим Экзамен: /exam, /exam/[attemptId] с таймером и навигатором",
+    "10. Личный кабинет ученика: /dashboard со статистикой",
+    "11. Кабинет учителя: очередь проверки + интерфейс проверки письменных",
+    "12. Интерфейс проверки устных работ (AudioPlayer + CriteriaScorer)",
+    "13. AudioRecorder для устных заданий учеников",
+    "14. Управление банком заданий (teacher/tasks)",
+    "15. Управление вариантами (teacher/variants)",
+    "16. Статистика учеников для учителя",
+    "17. Экспорт в CSV",
+    "18. Скрипт парсинга PDF (scripts/parse-pdfs.ts) — заполнение БД реальными заданиями",
+    "19. Полировка UI, тосты, обработка ошибок, валидация форм (zod)",
+    "20. Деплой-конфиг (vercel.json или Dockerfile)"
+  ],
+
+  "seedData": {
+    "description": "При первом запуске seed создаёт: аккаунт учителя из env, 2–3 демо-ученика, по 5 заданий каждого типа (заглушки до парсинга PDF), один демо-вариант для экзамена",
+    "demoTasksNote": "Все демо-задания помечаются sourceFile='demo' и могут быть заменены реальными после парсинга PDF из sourceDocuments"
+  },
+
+  "notes": [
+    "Аудиофайлы к заданиям на аудирование в PDF не содержатся. После парсинга PDF нужно вручную сопоставить задания с аудиозаписями от ФИПИ (официальные аудио доступны на fipi.ru).",
+    "Для продакшен-деплоя заменить SQLite на PostgreSQL (достаточно изменить DATABASE_URL и provider в schema.prisma).",
+    "MediaRecorder API работает только по HTTPS. На localhost — работает без HTTPS.",
+    "Устная часть ЕГЭ проходится в отдельный день — в приложении это отражено как отдельный режим 'Устная часть' внутри экзамена.",
+    "Баллы задания 38 (эссе) включают проверку по K5 (орфография/пунктуация) — учитель может выставить 0 баллов по всей работе если объём не соответствует норме (менее 180 слов).",
+    "При проверке заданий 37–38 учитель должен видеть критерии ФИПИ прямо в интерфейсе (вывести из scoringCriteria). Добавить кнопку-подсказку с подробным описанием каждого критерия."
+  ]
+}
