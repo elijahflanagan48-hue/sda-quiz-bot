@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+enum ExamSection {
+  LISTENING
+  READING
+  GRAMMAR_VOCAB
+  WRITING
+  ORAL
+}
+
+enum TaskType {
+  MATCHING
+  MULTIPLE_CHOICE
+  SHORT_ANSWER
+  HEADING_MATCHING
+  TRUE_NOT_STATED_FALSE
+  MULTIPLE_CHOICE_CLOZE
+  GRAMMAR_TRANSFORMATION
+  WORD_FORMATION
+  LEXICAL_CLOZE
+  EMAIL
+  ESSAY
+  READ_ALOUD
+  CONDITIONAL_DIALOG
+  PHOTO_MONOLOGUE
+  PHOTO_COMPARISON
+}
+
+enum ExamPart {
+  WRITTEN
+  ORAL
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  TEACHER_REVIEW
+  GRADED
+}
+
+enum AppMode {
+  PRACTICE
+  EXAM
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(STUDENT)
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+
+  examAttempts    ExamAttempt[]
+  submissions     TaskSubmission[]
+  practiceSessions PracticeSession[]
+}
+
+model Task {
+  id            String      @id @default(cuid())
+  section       ExamSection
+  taskNumber    Int
+  taskType      TaskType
+  difficulty    Int         @default(2)
+  content       String      // JSON stored as string
+  correctAnswer String?
+  explanation   String?
+  audioUrl      String?
+  imageUrl      String?
+  sourceFile    String?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  examVariantTasks ExamVariantTask[]
+  submissions      TaskSubmission[]
+}
+
+model ExamVariant {
+  id         String   @id @default(cuid())
+  title      String
+  year       Int?
+  isOfficial Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  tasks    ExamVariantTask[]
+  attempts ExamAttempt[]
+}
+
+model ExamVariantTask {
+  variantId String
+  taskId    String
+  order     Int
+
+  variant ExamVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  task    Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, taskId])
+}
+
+model ExamAttempt {
+  id           String        @id @default(cuid())
+  userId       String
+  variantId    String
+  part         ExamPart
+  status       AttemptStatus @default(IN_PROGRESS)
+  startedAt    DateTime      @default(now())
+  finishedAt   DateTime?
+  timeSpentSec Int?
+  autoScore    Int?
+  teacherScore Int?
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variant   ExamVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  submissions TaskSubmission[]
+}
+
+model TaskSubmission {
+  id              String    @id @default(cuid())
+  userId          String
+  taskId          String
+  attemptId       String?
+  mode            AppMode
+  answer          String    // JSON string
+  audioUrl        String?
+  isCorrect       Boolean?
+  autoScore       Int?
+  teacherScore    Int?
+  criteriaScores  String?   // JSON string
+  teacherFeedback String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task    Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  attempt ExamAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+}
+
+model PracticeSession {
+  id           String      @id @default(cuid())
+  userId       String
+  section      ExamSection
+  taskType     TaskType
+  totalTasks   Int
+  correctTasks Int
+  startedAt    DateTime    @default(now())
+  finishedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
