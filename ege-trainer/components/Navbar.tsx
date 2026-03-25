@@ -17,6 +17,8 @@ export default function Navbar() {
     { href: '/practice', label: 'Тренировка' },
     { href: '/exam', label: 'Экзамен' },
     { href: '/history', label: 'История' },
+    { href: '/profile', label: 'Профиль' },
+    { href: '/settings', label: 'Настройки' },
   ]
 
   const teacherLinks = [

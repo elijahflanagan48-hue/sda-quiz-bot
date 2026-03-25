@@ -16,6 +16,7 @@ export async function proxy(req: NextRequest) {
     nextUrl.pathname.startsWith('/exam') ||
     nextUrl.pathname.startsWith('/history') ||
     nextUrl.pathname.startsWith('/profile') ||
+    nextUrl.pathname.startsWith('/settings') ||
     isTeacherRoute
 
   if (isProtectedRoute && !isLoggedIn) {

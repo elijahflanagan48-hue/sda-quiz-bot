@@ -56,16 +56,17 @@ enum AppMode {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  role         Role     @default(STUDENT)
-  avatarUrl    String?
-  createdAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  passwordHash   String
+  role           Role     @default(STUDENT)
+  avatarUrl      String?
+  telegramChatId String?
+  createdAt      DateTime @default(now())
 
-  examAttempts    ExamAttempt[]
-  submissions     TaskSubmission[]
+  examAttempts     ExamAttempt[]
+  submissions      TaskSubmission[]
   practiceSessions PracticeSession[]
 }
 
@@ -135,11 +136,13 @@ model TaskSubmission {
   mode            AppMode
   answer          String    // JSON string
   audioUrl        String?
+  imageUrl        String?
   isCorrect       Boolean?
   autoScore       Int?
   teacherScore    Int?
   criteriaScores  String?   // JSON string
   teacherFeedback String?
+  submittedForReview Boolean @default(false)
   reviewedAt      DateTime?
   createdAt       DateTime  @default(now())
 

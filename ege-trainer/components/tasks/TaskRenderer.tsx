@@ -18,13 +18,13 @@ interface Task {
 interface TaskRendererProps {
   task: Task
   mode: 'practice' | 'exam'
-  onSubmit: (answer: string) => void
+  onSubmit: (answer: string, imageUrl?: string) => void
   showAnswer?: boolean
   readonly?: boolean
 }
 
 export default function TaskRenderer({ task, mode, onSubmit, showAnswer, readonly }: TaskRendererProps) {
-  const commonProps = { task, onSubmit, showAnswer, readonly }
+  const commonProps = { task, onSubmit: (a: string) => onSubmit(a), showAnswer, readonly }
 
   switch (task.taskType) {
     case 'MATCHING':
