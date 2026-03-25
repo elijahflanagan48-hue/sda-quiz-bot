@@ -14,7 +14,7 @@ export async function POST() {
     data: { telegramToken: token },
   })
 
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'ege_prep_bot'
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME || 'eggee_bot_bot'
   const url = 'https://t.me/' + botUsername + '?start=' + token
 
   return NextResponse.json({ url })
