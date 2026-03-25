@@ -62,8 +62,9 @@ model User {
   passwordHash   String
   role           Role     @default(STUDENT)
   avatarUrl      String?
-  telegramChatId String?
-  createdAt      DateTime @default(now())
+  telegramChatId  String?
+  telegramToken   String?  @unique
+  createdAt       DateTime @default(now())
 
   examAttempts     ExamAttempt[]
   submissions      TaskSubmission[]
