@@ -36,7 +36,8 @@ export default function RegisterPage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">Регистрация</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1 text-center">Регистрация ученика</h1>
+        <p className="text-sm text-gray-400 text-center mb-6">Аккаунт для подготовки к ЕГЭ</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

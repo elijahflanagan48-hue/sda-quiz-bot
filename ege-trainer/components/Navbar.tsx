@@ -55,7 +55,12 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{session.user.name}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-700 font-medium">{session.user.name}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${isTeacher ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+              {isTeacher ? 'Учитель' : 'Ученик'}
+            </span>
+          </div>
           <button
             onClick={() => signOut({ callbackUrl: '/' })}
             className="text-sm text-gray-600 hover:text-red-600 transition-colors"
