@@ -1,13 +1,12 @@
-import NextAuth from 'next-auth'
-import { authConfig } from '@/lib/auth.config'
-
-const { auth } = NextAuth(authConfig)
+import { auth } from '@/lib/auth'
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
-export default auth((req) => {
-  const { nextUrl, auth: session } = req as typeof req & { auth: { user?: { role: string } } | null }
+export async function proxy(req: NextRequest) {
+  const session = await auth()
+  const { nextUrl } = req
   const isLoggedIn = !!session?.user
-  const isTeacher = session?.user?.role === 'TEACHER'
+  const isTeacher = (session?.user as { role?: string })?.role === 'TEACHER'
 
   const isAuthPage = nextUrl.pathname.startsWith('/auth')
   const isTeacherRoute = nextUrl.pathname.startsWith('/teacher')
@@ -32,7 +31,7 @@ export default auth((req) => {
   }
 
   return NextResponse.next()
-})
+}
 
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
